@@ -3,6 +3,8 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
+import math
+from common import*
 
 smooth = 0.00001
 
@@ -96,8 +98,71 @@ class CELoss4MOTS(nn.Module):
 		return total_loss.sum()/total_loss.shape[0]
 
 def dice(logits, targets, class_index):
+	assert logits.shape[0] == targets.shape[0],"batch size don't match"
 	probs = F.sigmoid(logits[:, class_index, :, :, :])
-	inter = torch.sum(probs*targets[:, class_index, :, :, :])
-	union = torch.sum(probs) +torch.sum(targets[:, class_index, :, :, :])
-	dice = (2.*inter + smooth) / (union + smooth)
-	return 1-dice
+
+	probs = probs.contiguous().view(probs.shape[0], -1)
+	targets = targets.contiguous().view(targets.shape[0], -1)
+
+	num = torch.sum(torch.mul(probs, targets), dim=1)
+	den = torch.sum(probs, dim=1) + torch.sum(targets, dim=1) + smooth
+
+	dice_score = 2*num / den
+	dice_loss = 1 - dice_score
+
+	dice_loss_avg = dice_loss[targets[:,0]!=-1].sum() / dice_loss[targets[:,0]!=-1].shape[0]
+	return dice_loss_avg
+
+def dis(pred, targ):
+	dist = abs(pred - targ)
+	dist = np.sum(dist, axis = 0)
+	dist = dist // 6
+	dist_loss = math.log(1 + dist)/math.log(60)
+	return dist_loss
+
+def cor_loss(logits, targ_cor, class_index, score):
+	probs = F.sigmoid(logits[:, class_index, :, :, :])
+	probs = probs.data.cpu().numpy()
+	targ_cor = targ_cor.data.cpu().numpy()
+	score = score.data.cpu().numpy()
+	loss = []
+	cor_false1 = np.array([0, 0, 0, 128, 128, 128])
+	cor_false2 = [0, 1, 0, 128, 128, 128]
+	cor_false3 = [0, 2, 0, 128, 128, 128]
+	thres = 0.3
+
+	for i in range (0, probs.shape[0]):
+		prob = probs[i, :, :, :]
+		if score < 0.7:
+			tempt = 0.7 - score
+			prob[prob>thres+tempt] = 1
+			prob[prob<thres+tempt] = 0
+			cor = cal_property(prob)
+			if cor.all() == cor_false1.all():
+				loss.append(0)
+			else:
+				print(cor)
+				loss.append(dis(cor, targ_cor[i, :]))
+		else:
+			loss.append(0)
+		loss = np.mean(loss)
+	return loss
+
+
+# def similarity_loss(logits, targ):
+# 	slimilarity = nn.L1Loss(reduction='elementwise_mean')
+# 	loss = slimilarity(logits,targ)
+# 	return loss
+
+# def similarity_loss(logits, targ):
+# 	logits = logits.view(1,-1)
+# 	targ = targ.view(1,-1)
+# 	slimilarity = torch.cosine_similarity(logits, targ, dim=0)
+# 	loss = 1 - slimilarity
+# 	loss = loss + 1e-8
+# 	return loss
+
+def similarity_loss(logits, targ):
+	slimilarity = nn.MSELoss(reduce=True, size_average=True)
+	loss = slimilarity(logits,targ)
+	return loss
