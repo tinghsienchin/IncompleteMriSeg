@@ -109,7 +109,7 @@ if __name__ == '__main__':
 	train_loader = DataLoader(dataset = train_set, shuffle = True, num_workers = args.num_workers)
 	val_loader = DataLoader(dataset = val_set, shuffle = True, num_workers = args.num_workers)
 	# model = UNet(in_channels = 1, n_classes=args.num_classes, base_n_filter=16).to(device)
-	model = ResUNet(in_channels = 1, n_classes=args.num_classes, base_n_filter=16, layers = [1, 2, 2, 2, 2]).to(device)
+	model = ResUNet(in_channels = 1, n_classes=args.num_classes, base_n_filter=8, layers = [1, 2, 2, 2, 2]).to(device)
 	# model = UNet3D(num_classes=args.num_classes, weight_std=args.weight_std).to(device)
 	#reload_model(args.reload, args.reload_path)
 	optimizer = optim.SGD(model.parameters(), args.learning_rate, args.momentum, nesterov=True)
